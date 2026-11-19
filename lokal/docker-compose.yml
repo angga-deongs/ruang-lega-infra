@@ -1,0 +1,61 @@
+# Layanan pendukung untuk pengembangan lokal RUANG LEGA (Phase 4).
+# Medusa dan Next.js dijalankan langsung di Mac; di sini database, Redis, dan Garage (penyimpanan foto).
+# Port hanya dibuka untuk komputer ini (127.0.0.1), tidak ke jaringan.
+# Nilai rahasia lokal ada di .env (tidak masuk git); contohnya di .env.example.
+name: ruang-lega-lokal
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa-lokal}
+      POSTGRES_DB: ${POSTGRES_DB:-ruang_lega}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-medusa} -d ${POSTGRES_DB:-ruang_lega}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Penyimpanan foto yang kompatibel dengan S3. Satu node, bucket bawaan dan kuncinya dibuat saat pertama jalan.
+  garage:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    command: ['/garage', 'server', '--single-node', '--default-bucket']
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?isi GARAGE_RPC_SECRET di .env}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?isi GARAGE_ADMIN_TOKEN di .env}
+      GARAGE_DEFAULT_ACCESS_KEY: ${GARAGE_ACCESS_KEY:?isi GARAGE_ACCESS_KEY di .env}
+      GARAGE_DEFAULT_SECRET_KEY: ${GARAGE_SECRET_KEY:?isi GARAGE_SECRET_KEY di .env}
+      GARAGE_DEFAULT_BUCKET: ${GARAGE_BUCKET:-localhost}
+    ports:
+      - '127.0.0.1:3900:3900'
+      - '127.0.0.1:3902:3902'
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+
+volumes:
+  postgres-data:
+  redis-data:
+  garage-meta:
+  garage-data:
